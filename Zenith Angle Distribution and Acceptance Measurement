@@ -1,0 +1,387 @@
+#include <iostream>
+#include <sstream>
+#include <fstream>
+#include <stdlib.h>
+#include <string>
+#include <vector>
+#include <iomanip>
+#include <fstream>
+#include <ctime>
+#include "TH1F.h"
+#include <TMath.h>
+#include <TLegend.h>
+#include "TCanvas.h"
+#include <TPad.h>
+#include "TStyle.h"
+#include <cstdlib>
+#include <cmath>
+#include "TGraphErrors.h"
+#include "TLegend.h"
+#include"TPaveText.h"
+#include"TPaveLabel.h"
+#include <fstream>
+#include <stdlib.h>
+#include "TMath.h"
+#include "TRandom.h"
+#include "TRandom3.h"
+#include "TF1.h"
+#include "TH2F.h"
+#include "TGraph.h"
+#include "TMultiGraph.h"
+#include "TCanvas.h"
+#include "TAxis.h"
+#include "TSystem.h"
+#include "TROOT.h"
+#include "TChain.h"
+#include "TFile.h"
+#include <TSystem.h>
+#include <iterator>
+#include <iostream>
+#include <cstdlib>
+#include <string>
+#include <vector>
+#include <map>
+
+//=========================== Global Variables ============================//
+//const double pi = TMath::Pi();
+//const  double DR = pi/180.0;
+
+double pi = TMath::Pi();
+double c = 0.299792458;  //speed in meter/nansec
+double muonmass= 0.1056583715;
+double muonmass2 = muonmass*muonmass;
+
+
+double power_law(double *x, double *par)
+{ 
+  double I0 = par[0];
+  double E0 = par[1];
+  double n = par[2];
+  double epsilon = par[3];
+  double rbd = par[4];
+  double theta = par[5]*pi/180.0;
+  double mass=par[6];
+  double a= par[7];
+
+  double mass2=mass*mass;
+  double E=sqrt(x[0]*x[0]+mass2);
+  
+  double rbcos = rbd*cos(theta);
+  double L = sqrt(rbcos*rbcos + 2*rbd + 1.0) - rbcos;
+  double fn_ang = pow(L,-n+1); //theta dep.
+  
+  double Norm =(n-1)*pow(E0, (n-1));
+
+  double fn_extra = pow(1.0+E/epsilon, -1);  //takes care of fall in power at very high mom
+
+  double fx = I0*Norm * pow(E+E0+a/E, -n) * fn_extra * fn_ang;
+  
+  return(fx);
+}
+
+double approximation(double *x, double *par)
+{
+  double Emu=sqrt(x[0]*x[0]+muonmass2);
+  double factor=x[0]/Emu;
+  double fx = 1400*pow(Emu,-par[0])*((1/(1+ 1.1*Emu*cos(par[3])/par[1]))+ 0.054/(1+ 1.1*Emu*cos(par[3])/par[2]));
+  return (fx*factor);
+}
+
+
+double angularfit_function(double *x, double *par)
+{
+  double theta = x[0]*pi/180.0;
+  
+  double I0 = par[0];
+  double n = par[1];
+  double rbd = par[2];
+
+  
+  double rbcos = rbd*cos(theta);
+  double L = sqrt(rbcos*rbcos + 2*rbd + 1.0) - rbcos;
+  double fx = I0 * pow(L,-n+1); //theta dep.
+  
+  //double fx = par[0]*(pow(cos(theta),par[1])+par[2]*pow(cos(theta),par[3]))  ;
+  return(fx);
+}
+
+
+double cos_fit_function(double *x, double *par)
+{
+  double theta = x[0]*pi/180.0;
+  double phi_0 = par[0];
+  double n = par[1];
+  double fx = phi_0* pow(cos(theta),n-1); //theta dep.
+  return(fx);
+}
+
+
+
+double momentumlossfunction(double p0, double x)
+{
+  double density = 2.300; //in gm/cm3
+  double a = 2.17*0.001 ;
+  double b = 1.711*0.000001; 
+  
+  x=x*density*100000; //assuming height is entered in km now converted to gm/cm2
+  
+  double E0 = sqrt(p0*p0 +muonmass2);
+  
+  double Ex = (E0 + a/b)*exp(-b*x) - (a/b);
+  double px;
+  if(Ex<0) Ex=0;
+  
+  px = sqrt(Ex*Ex - muonmass2);
+  return (px);
+}
+
+double muontrack(double x, double y, double theta, double Phi);
+
+double timeofflight(double Momentum, double length);
+
+double SolidAngle();
+
+// geometry of the setup
+double length1 = 1.0;
+double width1 = 0.05;
+
+double length2= 1.0;
+double width2 = 0.05;
+
+double dist = 0.5;
+
+double x_0=0.0; 
+double y_0=0.0;
+
+double offsetangle = 0.0;
+double thickness = 0.0;
+
+// Number of Muons
+int nn = (88.0) * (0.05) * (2.0*pi/3.0) * 1000.0;   // flux * area * SolidAngle * time
+
+
+void detector()
+{
+
+  gROOT->SetStyle("Plain");
+  gStyle->SetPalette(1);
+  gStyle->SetOptTitle(0000); 
+  gStyle->SetOptStat(0);
+
+
+  gStyle->SetFrameBorderMode(0);
+  gStyle->SetFrameFillColor(0);
+  gStyle->SetCanvasColor(0);
+  gStyle->SetTitleFillColor(0);
+  gStyle->SetStatColor(0);
+  gStyle->SetPadBorderSize(0);
+  gStyle->SetCanvasBorderSize(0);
+
+  gStyle->SetCanvasDefH(600);
+  gStyle->SetCanvasDefW(600);
+  gStyle->SetPadTickX(1);
+  gStyle->SetPadTickY(1);
+
+  gStyle->SetOptFit(1111);
+  gStyle->SetOptFit(0);
+  gStyle->SetTitleOffset(1.1);
+  //gStyle->SetTitleSize(0.043, "xyz");
+
+  //  gStyle->SetPadBottomMargin(0.1);
+  gStyle->SetPadLeftMargin(0.16);
+  //  gStyle->SetTitleXOffset(1.0);
+  gStyle->SetTitleYOffset(2.0);
+
+
+
+  TRandom3 r(0); 
+
+  // Input functions
+
+  TF1 *anglefit = new TF1("anglefit", angularfit_function, 0.0, 89.0, 3);
+  anglefit->SetParameters(88.0, 3.0, 256.0);	 
+
+  TF1 *anglecosfit = new TF1("anglecosfit", cos_fit_function, 0.0, 89.0, 2);
+  anglecosfit->SetParameters(88.0, 3.0);	 
+
+  TF1 * momentumfit = new TF1("momentumfit", power_law, 0.100, 100.0, 8);
+  momentumfit->SetParNames("I0","E_loss","n","epsilon","rbd","theta","mass","E1");
+  momentumfit->SetParameters(88.0, 4.3, 3.0, 700.0, 0.0, 0.0, muonmass, 0.0);
+
+  // Histograms
+  TH1F *AngdistTopPlate = new TH1F("AngdistTopPlate", "AngdistTopPlate", 90.0, 0.0, 90.0);
+  AngdistTopPlate->SetLineWidth(2);
+
+  TH1F *AngdistBottomPlate = new TH1F("AngdistBottomPlate", "AngdistBottomPlate", 90.0, 0.0, 90.0);
+  AngdistBottomPlate->SetLineWidth(2);
+
+  TH1F *PhiBottomPlate = new TH1F("PhiBottomPlate", "PhiBottomPlate", 90.0, 0.0, 180.0);
+  PhiBottomPlate->SetLineWidth(2);
+
+  TH1F *muonMomentumGenerator = new TH1F("muonMomentumGenerator", "muonMomentumGenerator", 100.0, 0.100, 100.0);
+
+  TH1F *TimeofFlight = new TH1F("TimeofFlight", "TimeofFlight", 1000.0, 0.0, 20.0);
+  TimeofFlight->SetLineWidth(2);
+
+  TH2F *TOFvsMom = new TH2F("TOFvsMom", "TOFvsMom", 100.0, 0.0, 2.0, 1000.0, 0.0, 20.0);
+  TOFvsMom->GetXaxis()->SetTitle("Momentum (GeV/c)");
+  TOFvsMom->GetYaxis()->SetTitle("Time of Flight (ns)");
+
+  TH1F *Pathlength = new TH1F("Pathlength", "Pathlength", 500.0, 0.0, 5.0);
+  Pathlength->SetLineWidth(2);
+
+  // Solid Angle
+
+  double SolAng = SolidAngle();
+  cout <<" Total Solid Angle = " << SolAng <<endl;
+
+  int hits=0;
+  
+  for(int i=1; i<= nn; i++) {
+    double zenithangle=anglefit->GetRandom();
+    AngdistTopPlate->Fill(zenithangle);
+    
+    double momentum = momentumfit->GetRandom();
+    muonMomentumGenerator->Fill(momentum);
+
+    double x = r.Uniform(0.0,1.0);
+    double y = r.Uniform(0.0,1.0);
+    double theta = zenithangle;
+    double Phi = r.Uniform(0.0,1.0)*2.0*180.0;
+     
+    double pathlength= muontrack(x, y, theta, Phi);
+
+    if(pathlength>0){
+      Pathlength->Fill(pathlength);
+      AngdistBottomPlate->Fill(zenithangle);
+      PhiBottomPlate->Fill(Phi);
+
+      double tof = timeofflight(momentum, pathlength);
+      TimeofFlight->Fill(tof);
+      TOFvsMom->Fill(momentum,tof);
+      //cout<<momentum<<"	"<<tof<<endl;
+      hits++;
+    }
+  }
+
+  cout << endl;
+  cout<< " No. of Events = " << nn << endl;
+  cout<< " No. of Hits = " << hits << endl;
+  
+  double Acceptance = (double)hits/(double)nn;
+  cout<< " Accepted cosmic ray fraction is : " << Acceptance << endl << endl;
+  
+  new TCanvas;
+  gPad->SetLogy(1);
+  momentumfit->GetXaxis()->SetTitle("Momentum (GeV/c)");
+  momentumfit->GetYaxis()->SetTitle("No. of Events");
+  momentumfit->GetYaxis()->CenterTitle();
+  momentumfit->Draw();
+
+
+  new TCanvas;
+  gPad->SetLogy(0);
+  Pathlength->GetXaxis()->SetTitle("Pathlength (meters)");
+  Pathlength->GetYaxis()->SetTitle("No. of Events");
+  Pathlength->GetYaxis()->CenterTitle();
+  Pathlength->Draw();
+  
+  new TCanvas;
+  TimeofFlight->GetXaxis()->SetTitle("Time of Flight (ns)");
+  TimeofFlight->GetYaxis()->SetTitle("No. of Events");
+  TimeofFlight->GetYaxis()->CenterTitle();
+  TimeofFlight->Draw();
+  
+  new TCanvas;
+  gStyle->SetPalette(1);
+  TOFvsMom->Draw("COLZ");
+  
+  new TCanvas;
+  PhiBottomPlate->GetXaxis()->SetTitle("Phi angle");
+  PhiBottomPlate->GetXaxis()->CenterTitle();
+  PhiBottomPlate->GetYaxis()->SetTitle("No. of Events");
+  PhiBottomPlate->GetYaxis()->CenterTitle();
+  PhiBottomPlate->SetLineColor(2);
+  PhiBottomPlate->Draw("same");
+
+
+  new TCanvas;
+  AngdistTopPlate->SetLineColor(1);
+  AngdistTopPlate->GetXaxis()->SetTitle("Zenith angle");
+  AngdistTopPlate->GetXaxis()->CenterTitle();
+  AngdistTopPlate->GetYaxis()->SetTitle("No. of Events");
+  AngdistTopPlate->GetYaxis()->CenterTitle();
+  AngdistBottomPlate->SetLineColor(2);
+  AngdistTopPlate->Draw();
+  AngdistBottomPlate->Draw("same");
+  
+  TLegend* leg= new TLegend(0.40,0.75,0.70,0.85);
+  leg->SetBorderSize(0);
+  leg->SetFillStyle(1001);
+  leg->SetFillColor(10);
+  leg->SetTextSize(0.035);
+  leg->AddEntry(AngdistTopPlate,"Flux at top plate","l");
+  leg->AddEntry(AngdistBottomPlate,"Flux at (top+bottom) plate","l");
+  leg->Draw();
+  
+}
+
+
+
+
+double muontrack(double x, double y, double theta, double Phi)
+{
+  double xtop=x*width1; 
+  double ytop=y*length1;
+  double phi=Phi*pi/180.0;
+  double zenithangle= (theta-offsetangle)*pi/180.0;
+
+  double pathlength = 0.0;
+  
+  //  double tanTh = sqrt(1.0-cos(zenithangle)*cos(zenithangle))/cos(zenithangle);
+  double tanTh = TMath::Tan(zenithangle);
+  double r = dist*tanTh;
+  double xbot= xtop - r*cos(phi);
+  double ybot= ytop - r*sin(phi);
+  
+  if( xbot>x_0 && xbot<x_0+width2 && ybot>y_0 && ybot<y_0+length2){
+    pathlength= sqrt((dist*dist) +(xtop-xbot)*(xtop-xbot)+ (ytop-ybot)*(ytop-ybot));
+  }
+  
+  return pathlength;
+}
+
+
+double timeofflight(double Momentum, double len)
+{
+  double velocity = Momentum*c/sqrt(Momentum*Momentum + muonmass2);
+  double time = len/velocity;    //calculate time of flight in nanoseconds
+  return time;
+ }
+
+
+double SolidAngle()
+{
+  TF1 *ftheta = new TF1("ftheta", angularfit_function, 0.0, 89.0, 3);
+  ftheta->SetParameters(1.0, 3.0, 256.0);	 
+
+  TRandom3 rr(0); 
+
+  int N = 20000.0;
+  double sum = 0.0;
+
+  //  double sum1 = 0.0;
+  
+  for(int i=1; i<= N; i++) {
+    double theta = rr.Uniform(0.0,1.0)*90.0;
+    //    double Phi = rr.Uniform(0.0,1.0)*2.0*pi;
+    
+    double fun = ftheta->Eval(theta)*TMath::Sin(theta*pi/180.0);
+
+    sum = sum + fun;
+
+  }
+
+  double integral = sum*2*pi*(pi/2.0)/N;
+  return integral;
+}

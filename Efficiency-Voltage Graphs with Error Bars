@@ -1,1 +1,106 @@
+#include <iostream>
+#include <sstream>
+#include <fstream>
+#include <stdlib.h>
+#include <string>
+#include <vector>
+#include <iomanip>
+#include <fstream>
+#include <ctime>
+#include "TH1F.h"
+#include <TMath.h>
+#include <TLegend.h>
+#include "TCanvas.h"
+#include <TPad.h>
+#include "TStyle.h"
+#include <cstdlib>
+#include <cmath>
+#include "TGraphErrors.h"
+#include "TLegend.h"
+#include"TPaveText.h"
+#include"TPaveLabel.h"
+#include <fstream>
+#include <stdlib.h>
+#include "TMath.h"
+#include "TRandom.h"
+#include "TRandom3.h"
+#include "TF1.h"
+#include "TH2F.h"
+#include "TGraph.h"
+#include "TMultiGraph.h"
+#include "TCanvas.h"
+#include "TAxis.h"
+#include "TSystem.h"
+#include "TROOT.h"
+#include "TChain.h"
+#include "TFile.h"
+#include <TSystem.h>
+#include <iterator>
+#include <iostream>
+#include <cstdlib>
+#include <string>
+#include <vector>
+#include <map>
+
+
+void paddle4error(char *file = "paddle4errordata.txt"){
+
+  gStyle->SetCanvasDefH(600);
+  gStyle->SetCanvasDefW(800);
+  gStyle->SetOptTitle(0);
+  gStyle->SetTitleFillColor(0);
+
+
+  int NN;
+  double XX[100], N1[100], t1[100];
+  double YY[100];
+  double eXX[100];
+  double eYY[100];
+
+  ifstream filein(file);
+
+  double N2 = 880;
+  double t2 = 2341;
+  filein >> NN;
+
+  for(int i=0; i<NN; i++){
+    filein >> XX[i] >> N1[i] >> t1[i];
+
+    double N1s = N1[i]/t1[i];
+    double N2s = N2/t2;
+    YY[i] = N1s/N2s;
+ 
+    eXX[i] = 0.0;
+    eYY[i] = sqrt( YY[i]*(1-YY[i])/(N2s*t1[i]) );
+
+    double e1 = sqrt(N1[i])/N1[i];
+    double e2 = sqrt(N2)/N2;
+
+    eYY[i] = YY[i]*sqrt(e1*e1 + e2*e2);
+
+    
+    cout << XX[i] << "   " << YY[i] << "   " << eYY[i] << endl;
+  }
+  
+
+  TGraphErrors *gr = new TGraphErrors(NN,XX,YY,eXX,eYY);
+  new TCanvas;
+  gPad->SetTickx();
+  gPad->SetTicky();
+ 
+  gr->SetTitle("Paddle 2.2 Efficiency error curve");
+  gr->SetMarkerStyle(20);
+  gr->SetMarkerColor(2);
+  gr->SetLineWidth(2);
+  gr->SetLineColor(2);
+  gr->GetXaxis()->CenterTitle();
+  gr->GetYaxis()->CenterTitle();
+
+  gr->GetXaxis()->SetRangeUser(1000, 1600);
+  gr->GetYaxis()->SetRangeUser(0, 1.5);
+
+  gr->GetXaxis()->SetTitle("Voltage (Volts)");
+  gr->GetYaxis()->SetTitle("Efficiency");
+  gr->Draw("AP");
+}
 
